@@ -1,0 +1,34 @@
+name: Build Chiaki-ng (Input Only)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential qt6-base-dev libqt6svg6-dev qt6-declarative-dev \
+        libsdl2-dev libssl-dev python3-protobuf protobuf-compiler
+
+    - name: Configure CMake
+      # Note que desativamos explicitamente codecs e processamento de áudio se possível via flags
+      run: |
+        cmake -B build \
+          -DCHIAKI_GUI_ENABLE_SPEEX=OFF \
+          -DCHIAKI_GUI_ENABLE_OPUS=OFF \
+          -DCMAKE_BUILD_TYPE=Release
+
+    - name: Build
+      run: cmake --build build --config Release
