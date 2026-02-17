@@ -14,6 +14,17 @@ jobs:
       with:
         submodules: recursive
 
+    # CORREÇÃO: Instalando dependências de Python para o Nanopb
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install Python Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install protobuf grpcio-tools nanopb
+
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
@@ -21,12 +32,10 @@ jobs:
         arch: 'win64_msvc2019_64'
 
     - name: Install SDL2
-      # Adicionada a flag --classic para ignorar o erro de manifesto
       run: |
         vcpkg install sdl2:x64-windows --classic
 
     - name: Configure CMake
-      # Adicionado o Triplet para garantir que o CMake encontre a lib de 64 bits
       run: |
         cmake -B build `
           -DCHIAKI_ENABLE_GUI=ON `
@@ -34,6 +43,7 @@ jobs:
           -DCHIAKI_LIB_ENABLE_OPUS=OFF `
           -DCHIAKI_ENABLE_SPEEX=OFF `
           -DCHIAKI_ENABLE_STEAMDECK_NATIVE=OFF `
+          -DCHIAKI_USE_WEBENGINE=OFF `
           -DCMAKE_BUILD_TYPE=Release `
           -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
           -DVCPKG_TARGET_TRIPLET=x64-windows
