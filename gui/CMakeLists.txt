@@ -1,4 +1,3 @@
-
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
@@ -7,9 +6,9 @@ if(APPLE)
 	enable_language(OBJCXX)
 endif()
 
+# Buscamos apenas os componentes essenciais do Qt para a interface e botões
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Concurrent Svg Qml Quick Widgets)
-find_package(Qt6 COMPONENTS WebEngineQuick)
-find_package(Qt6 COMPONENTS DBus)
+# WebEngineQuick e DBus foram removidos para evitar erros de dependência no Windows
 
 if(WIN32)
 	add_definitions(-DWIN32_LEAN_AND_MEAN)
@@ -63,29 +62,15 @@ elseif(WIN32)
 	list(APPEND RESOURCE_FILES "chiaking.rc")
 endif()
 
-if(CHIAKI_ENABLE_STEAMDECK_NATIVE AND LINUX)
-	list(APPEND SOURCE_FILES
-		include/sdinputcontext.h
-		src/sdinputcontext.cpp
-	)
-endif()
-
-if(APPLE)
-	list(APPEND SOURCE_FILES
-		include/macMicPermission.h
-		src/macMicPermission.m
-	)
-endif()
-
 add_executable(chiaki WIN32
 		${RESOURCE_FILES}
 		${SOURCE_FILES}
 )
 target_include_directories(chiaki PRIVATE include)
 
-add_library(placebo-libav-impl src/libav_impl.c)
-target_link_libraries(placebo-libav-impl PkgConfig::LIBPLACEBO FFMPEG::avcodec FFMPEG::avutil FFMPEG::avformat)
-target_link_libraries(chiaki PkgConfig::LIBPLACEBO placebo-libav-impl)
+# --- REMOVIDO: PLACEBO E FFMPEG ---
+# As linhas que criavam a biblioteca 'placebo-libav-impl' foram removidas
+# para evitar o erro de 'libplacebo not found'.
 
 target_link_libraries(chiaki chiaki-lib)
 if(CHIAKI_ENABLE_CLI)
@@ -93,43 +78,20 @@ if(CHIAKI_ENABLE_CLI)
 	target_link_libraries(chiaki chiaki-cli-lib)
 endif()
 
+# Links básicos do Qt
 target_link_libraries(chiaki Qt::Core Qt::Gui Qt::GuiPrivate Qt::Concurrent Qt::Svg Qt::Qml Qt::Quick Qt::Widgets)
-if (${Qt6DBus_FOUND} AND NOT WIN32)
-	target_link_libraries(chiaki Qt::DBus)
-	target_compile_definitions(chiaki PRIVATE CHIAKI_HAVE_DBUS)
-endif()
-if (${Qt6WebEngineQuick_FOUND})
-	target_link_libraries(chiaki Qt::WebEngineQuick)
-	target_compile_definitions(chiaki PRIVATE CHIAKI_HAVE_WEBENGINE)
-endif()
+
+# Link do SDL2 (Essencial para o controle funcionar no Windows)
 target_link_libraries(chiaki SDL2::SDL2)
-if(CHIAKI_ENABLE_SPEEX)
-  target_link_libraries(chiaki PkgConfig::SpeexDSP)
-  target_compile_definitions(chiaki PRIVATE CHIAKI_GUI_ENABLE_SPEEX)
-endif()
+
 if(CHIAKI_GUI_ENABLE_SDL_GAMECONTROLLER)
 	target_compile_definitions(chiaki PRIVATE CHIAKI_GUI_ENABLE_SDL_GAMECONTROLLER)
 endif()
-if(CHIAKI_ENABLE_SETSU)
-	target_link_libraries(chiaki setsu)
-	target_compile_definitions(chiaki PRIVATE CHIAKI_GUI_ENABLE_SETSU)
-endif()
-if(CHIAKI_ENABLE_STEAMDECK_NATIVE)
-	target_link_libraries(chiaki sdeck)
-	target_compile_definitions(chiaki PRIVATE QT_STATICPLUGIN CHIAKI_GUI_ENABLE_STEAMDECK_NATIVE)
-endif()
-if(CHIAKI_ENABLE_STEAM_SHORTCUT)
-	target_link_libraries(chiaki cpp-steam-tools)
-	target_compile_definitions(chiaki PRIVATE CHIAKI_GUI_ENABLE_STEAM_SHORTCUT)
-endif()
-if(NOT CHIAKI_ENABLE_FFMPEG_DECODER)
-	message(FATAL_ERROR "Chiaki GUI requires CHIAKI_ENABLE_FFMPEG_DECODER=ON")
-endif()
-if(APPLE)
-	target_link_libraries(chiaki "-framework AVFoundation")
-endif()
 
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fanalyzer")
+# --- TRAVA REMOVIDA ---
+# A mensagem de erro FATAL_ERROR que exigia FFMPEG_DECODER=ON foi removida
+# permitindo o build apenas para controle.
+
 set_target_properties(chiaki PROPERTIES
 		MACOSX_BUNDLE TRUE
 		MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/MacOSXBundleInfo.plist.in"
@@ -143,6 +105,3 @@ set_target_properties(chiaki PROPERTIES
 install(TARGETS chiaki
 		RUNTIME DESTINATION bin
 		BUNDLE DESTINATION bin)
-install(FILES chiaking.desktop DESTINATION share/applications)
-install(FILES chiaking.png DESTINATION share/icons/hicolor/512x512/apps)
-install(FILES io.github.streetpea.Chiaki4deck.appdata.xml DESTINATION share/metainfo)
