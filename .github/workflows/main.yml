@@ -21,10 +21,12 @@ jobs:
         arch: 'win64_msvc2019_64'
 
     - name: Install SDL2
+      # Adicionada a flag --classic para ignorar o erro de manifesto
       run: |
-        vcpkg install sdl2:x64-windows
+        vcpkg install sdl2:x64-windows --classic
 
     - name: Configure CMake
+      # Adicionado o Triplet para garantir que o CMake encontre a lib de 64 bits
       run: |
         cmake -B build `
           -DCHIAKI_ENABLE_GUI=ON `
@@ -33,7 +35,8 @@ jobs:
           -DCHIAKI_ENABLE_SPEEX=OFF `
           -DCHIAKI_ENABLE_STEAMDECK_NATIVE=OFF `
           -DCMAKE_BUILD_TYPE=Release `
-          -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
+          -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
+          -DVCPKG_TARGET_TRIPLET=x64-windows
 
     - name: Build
       run: cmake --build build --config Release
