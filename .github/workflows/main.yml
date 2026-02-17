@@ -1,33 +1,32 @@
-name: Build Chiaki-ng (Input Only)
+name: Build Chiaki Windows Control
 
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
-  build-linux:
-    runs-on: ubuntu-latest
+  build:
+    runs-on: windows-latest
 
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
 
-    - name: Install Dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y cmake build-essential qt6-base-dev libqt6svg6-dev qt6-declarative-dev \
-        libsdl2-dev libssl-dev python3-protobuf protobuf-compiler
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: '6.6.0'
+        arch: 'win64_msvc2019_64'
 
     - name: Configure CMake
-      # Note que desativamos explicitamente codecs e processamento de áudio se possível via flags
       run: |
-        cmake -B build \
-          -DCHIAKI_GUI_ENABLE_SPEEX=OFF \
-          -DCHIAKI_GUI_ENABLE_OPUS=OFF \
+        cmake -B build `
+          -DCHIAKI_ENABLE_GUI=ON `
+          -DCHIAKI_ENABLE_FFMPEG_DECODER=OFF `
+          -DCHIAKI_LIB_ENABLE_OPUS=OFF `
+          -DCHIAKI_ENABLE_SPEEX=OFF `
           -DCMAKE_BUILD_TYPE=Release
 
     - name: Build
