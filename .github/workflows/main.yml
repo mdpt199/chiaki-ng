@@ -14,13 +14,16 @@ jobs:
       with:
         submodules: recursive
 
-    # 1. LIMPEZA: Evita o erro EPERM (permissão negada) deletando pastas problemáticas
-    - name: Cleanup unnecessary folders
+    # 1. LIMPEZA E PERMISSÕES: Resolve o erro EPERM e EACCES
+    - name: Cleanup and Fix Permissions
       run: |
+        # Remove pastas problemáticas
         Remove-Item -Recurse -Force ./switch -ErrorAction Ignore
         Remove-Item -Recurse -Force ./android -ErrorAction Ignore
+        # Tenta liberar caminhos do Python que podem causar conflito de permissão
+        $env:PYTHONPATH=""
 
-    # 2. CACHE VCPKG: Ganhe tempo pulando a compilação do OpenSSL
+    # 2. CACHE VCPKG: Incrementado para v3 para evitar conflitos de builds anteriores
     - name: Restore vcpkg Cache
       uses: actions/cache@v4
       with:
@@ -29,7 +32,7 @@ jobs:
           C:/vcpkg/packages
         key: vcpkg-${{ runner.os }}-control-v3
 
-    # 3. PYTHON: Versão fixa para compatibilidade com o gerador do PlayStation
+    # 3. PYTHON: Necessário para o Nanopb
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
@@ -39,21 +42,22 @@ jobs:
       run: |
         pip install protobuf==4.25.1 grpcio-tools nanopb
 
-    # 4. QT: CORREÇÃO de nomenclatura dos módulos para evitar erro 'not found'
+    # 4. QT: CORREÇÃO DEFINITIVA
+    # Removemos a linha 'modules' para baixar o pacote desktop padrão. 
+    # Isso evita o erro "package not found" no XML do aqtinstall.
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
         version: '6.6.0'
         arch: 'win64_msvc2019_64'
-        # Em Qt6 via aqtinstall, usamos nomes curtos sem o prefixo 'qt'
-        modules: 'svg shadertools'
+        # Ao omitir 'modules', ele instala o set básico garantido que funciona.
 
-    # 5. SDL2: Modo clássico para instalar apenas o que falta no cache
+    # 5. SDL2: Modo clássico
     - name: Install SDL2
       run: |
         vcpkg install sdl2:x64-windows --classic
 
-    # 6. CMAKE: Desativação total de vídeo e WebEngine para um build leve
+    # 6. CMAKE: Configuração ultra-leve
     - name: Configure CMake
       run: |
         cmake -B build `
@@ -70,11 +74,11 @@ jobs:
           -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
           -DVCPKG_TARGET_TRIPLET=x64-windows
 
-    # 7. BUILD: Compilação acelerada em paralelo
+    # 7. BUILD: Compilação paralela
     - name: Build
       run: cmake --build build --config Release --parallel 4
 
-    # 8. DOWNLOAD: Seu executável final focado em controle
+    # 8. ARTEFATO: O executável final
     - name: Upload Executable
       uses: actions/upload-artifact@v4
       with:
