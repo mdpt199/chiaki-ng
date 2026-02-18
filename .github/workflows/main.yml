@@ -12,11 +12,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        submodules: false # Download manual para controle total
+        submodules: false
         fetch-depth: 0
 
-    # 1. LIMPEZA TOTAL (A Chave da Velocidade)
-    # Deletamos o vcpkg.json para impedir que ele baixe bibliotecas inúteis (Vulkan, FFTW, etc)
+    # 1. LIMPEZA (Mantém o build rápido e evita erros de permissão)
     - name: Cleanup Bloatware
       run: |
         Remove-Item -Recurse -Force ./switch -ErrorAction Ignore
@@ -24,48 +23,50 @@ jobs:
         if (Test-Path vcpkg.json) { Remove-Item -Force vcpkg.json }
         $env:PYTHONPATH=""
         
-        # Baixa apenas os submódulos vitais
+        # Submódulos manuais
         git submodule update --init --recursive third-party/nanopb
         git submodule update --init --recursive third-party/curl
         git submodule update --init --recursive third-party/jerasure
         git submodule update --init --recursive third-party/gf-complete
         git submodule update --init --recursive third-party/cpp-steam-tools
 
-    # 2. CONFIGURAÇÃO PYTHON (Corrige o erro 'MakeClass')
+    # 2. INSTALAÇÃO DO PROTOC (A CORREÇÃO NOVA)
+    # Instala o compilador .exe que estava faltando
+    - name: Install Protoc
+      run: choco install protoc --no-progress
+
+    # 3. PYTHON
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.10' # 3.10 é mais estável para builds antigos
+        python-version: '3.10'
 
     - name: Install Python Dependencies
       run: |
-        # Essa versão exata conserta o erro do Nanopb Generator
         pip install protobuf==3.20.3 grpcio-tools nanopb
 
-    # 3. CACHE INTELIGENTE
+    # 4. CACHE VCPKG (Para velocidade nos próximos builds)
     - name: Restore vcpkg Cache
       uses: actions/cache@v4
       with:
         path: |
           C:/vcpkg/installed
           C:/vcpkg/packages
-        key: vcpkg-fast-control-v1
+        key: vcpkg-fast-control-v2
 
-    # 4. INSTALAÇÃO MANUAL (Só o essencial)
-    # Como deletamos o vcpkg.json, precisamos instalar SDL2 e OpenSSL manualmente
+    # 5. DEPENDÊNCIAS C++ (Só o essencial)
     - name: Install Dependencies
       run: |
         vcpkg install sdl2:x64-windows openssl:x64-windows --classic
 
-    # 5. INSTALAÇÃO QT (Pacote Base)
+    # 6. QT BASE
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
         version: '6.6.0'
         arch: 'win64_msvc2019_64'
 
-    # 6. CMAKE TURBO
-    # Desativamos tudo que é "SYSTEM" para usar as versões internas (que compilam rápido)
+    # 7. CMAKE
     - name: Configure CMake
       run: |
         cmake -B build `
@@ -87,11 +88,11 @@ jobs:
           -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
           -DVCPKG_TARGET_TRIPLET=x64-windows
 
-    # 7. COMPILAÇÃO
+    # 8. BUILD
     - name: Build
       run: cmake --build build --config Release --parallel 4
 
-    # 8. DOWNLOAD
+    # 9. DOWNLOAD
     - name: Upload Executable
       uses: actions/upload-artifact@v4
       with:
