@@ -14,46 +14,46 @@ jobs:
       with:
         submodules: recursive
 
-    # 1. LIMPEZA: Remove arquivos que causam erro de permissão (EPERM) no Windows
+    # 1. LIMPEZA: Evita o erro EPERM (permissão negada) deletando pastas problemáticas
     - name: Cleanup unnecessary folders
       run: |
         Remove-Item -Recurse -Force ./switch -ErrorAction Ignore
         Remove-Item -Recurse -Force ./android -ErrorAction Ignore
 
-    # 2. CACHE VCPKG: Evita recompilar OpenSSL e dependências pesadas
+    # 2. CACHE VCPKG: Ganhe tempo pulando a compilação do OpenSSL
     - name: Restore vcpkg Cache
       uses: actions/cache@v4
       with:
         path: |
           C:/vcpkg/installed
           C:/vcpkg/packages
-        key: vcpkg-${{ runner.os }}-control-v2
+        key: vcpkg-${{ runner.os }}-control-v3
 
-    # 3. PYTHON: Versão fixa para garantir compatibilidade com o Nanopb
+    # 3. PYTHON: Versão fixa para compatibilidade com o gerador do PlayStation
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-        # Removido o cache: 'pip' aqui para evitar erros de permissão na indexação
 
     - name: Install Python Dependencies
       run: |
         pip install protobuf==4.25.1 grpcio-tools nanopb
 
-    # 4. QT: Apenas o módulo SVG para economizar tempo de download
+    # 4. QT: CORREÇÃO de nomenclatura dos módulos para evitar erro 'not found'
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
         version: '6.6.0'
         arch: 'win64_msvc2019_64'
-        modules: 'qtsvg'
+        # Em Qt6 via aqtinstall, usamos nomes curtos sem o prefixo 'qt'
+        modules: 'svg shadertools'
 
-    # 5. SDL2: Modo clássico para não travar no vcpkg.json
+    # 5. SDL2: Modo clássico para instalar apenas o que falta no cache
     - name: Install SDL2
       run: |
         vcpkg install sdl2:x64-windows --classic
 
-    # 6. CMAKE: Ultra-leve (Desativa tudo que não é controle)
+    # 6. CMAKE: Desativação total de vídeo e WebEngine para um build leve
     - name: Configure CMake
       run: |
         cmake -B build `
@@ -70,11 +70,11 @@ jobs:
           -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
           -DVCPKG_TARGET_TRIPLET=x64-windows
 
-    # 7. BUILD: Processamento paralelo com 4 núcleos
+    # 7. BUILD: Compilação acelerada em paralelo
     - name: Build
       run: cmake --build build --config Release --parallel 4
 
-    # 8. ARTEFATO: O arquivo final para você baixar
+    # 8. DOWNLOAD: Seu executável final focado em controle
     - name: Upload Executable
       uses: actions/upload-artifact@v4
       with:
