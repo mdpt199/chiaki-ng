@@ -15,7 +15,7 @@ jobs:
         submodules: false
         fetch-depth: 0
 
-    # 1. LIMPEZA (Mantém o build rápido e evita erros de permissão)
+    # 1. LIMPEZA
     - name: Cleanup Bloatware
       run: |
         Remove-Item -Recurse -Force ./switch -ErrorAction Ignore
@@ -30,12 +30,11 @@ jobs:
         git submodule update --init --recursive third-party/gf-complete
         git submodule update --init --recursive third-party/cpp-steam-tools
 
-    # 2. INSTALAÇÃO DO PROTOC (A CORREÇÃO NOVA)
-    # Instala o compilador .exe que estava faltando
+    # 2. INSTALA O COMPILADOR DE PROTOCOLO (Mantido)
     - name: Install Protoc
       run: choco install protoc --no-progress
 
-    # 3. PYTHON
+    # 3. PYTHON (Mantido)
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
@@ -45,19 +44,20 @@ jobs:
       run: |
         pip install protobuf==3.20.3 grpcio-tools nanopb
 
-    # 4. CACHE VCPKG (Para velocidade nos próximos builds)
+    # 4. CACHE (Atualizado para v3 para garantir ambiente limpo)
     - name: Restore vcpkg Cache
       uses: actions/cache@v4
       with:
         path: |
           C:/vcpkg/installed
           C:/vcpkg/packages
-        key: vcpkg-fast-control-v2
+        key: vcpkg-fast-control-v3
 
-    # 5. DEPENDÊNCIAS C++ (Só o essencial)
+    # 5. DEPENDÊNCIAS (A CORREÇÃO ESTÁ AQUI)
+    # Adicionamos 'pkgconf:x64-windows' para corrigir o erro "Could NOT find PkgConfig"
     - name: Install Dependencies
       run: |
-        vcpkg install sdl2:x64-windows openssl:x64-windows --classic
+        vcpkg install sdl2:x64-windows openssl:x64-windows pkgconf:x64-windows --classic
 
     # 6. QT BASE
     - name: Install Qt
