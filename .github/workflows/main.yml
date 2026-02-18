@@ -14,15 +14,24 @@ jobs:
       with:
         submodules: recursive
 
+    # 1. Cache do vcpkg (Isso evita baixar e compilar tudo de novo se não mudar as configs)
+    - name: Restore vcpkg Cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          C:/vcpkg/installed
+          C:/vcpkg/packages
+        key: vcpkg-${{ runner.os }}-control-v1
+
+    # 2. Python rápido e fixo
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
+        cache: 'pip'
 
     - name: Install Python Dependencies
       run: |
-        python -m pip install --upgrade pip
-        # FORÇANDO VERSÃO 4.25.1 PARA COMPATIBILIDADE COM NANOPB
         pip install protobuf==4.25.1 grpcio-tools nanopb
 
     - name: Install Qt
@@ -30,15 +39,20 @@ jobs:
       with:
         version: '6.6.0'
         arch: 'win64_msvc2019_64'
+        modules: 'qtsvg' # Baixa apenas o necessário
 
+    # 3. Instala apenas o SDL2 (O vcpkg vai pular o que já estiver no cache)
     - name: Install SDL2
       run: |
         vcpkg install sdl2:x64-windows --classic
 
+    # 4. Configuração CMake Ultra-Leve
     - name: Configure CMake
       run: |
         cmake -B build `
           -DCHIAKI_ENABLE_GUI=ON `
+          -DCHIAKI_ENABLE_CLI=OFF `
+          -DCHIAKI_ENABLE_TESTS=OFF `
           -DCHIAKI_ENABLE_FFMPEG_DECODER=OFF `
           -DCHIAKI_LIB_ENABLE_OPUS=OFF `
           -DCHIAKI_ENABLE_SPEEX=OFF `
@@ -49,7 +63,8 @@ jobs:
           -DVCPKG_TARGET_TRIPLET=x64-windows
 
     - name: Build
-      run: cmake --build build --config Release
+      # Usamos -j para compilar em paralelo (mais rápido)
+      run: cmake --build build --config Release --parallel 4
 
     - name: Upload Executable
       uses: actions/upload-artifact@v4
