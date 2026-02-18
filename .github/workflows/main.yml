@@ -12,52 +12,53 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        submodules: recursive
+        submodules: false # Vamos baixar só o necessário manualmente
+        fetch-depth: 0
 
-    # 1. LIMPEZA: Remove arquivos que causam erro de permissão
-    - name: Cleanup unnecessary folders
+    # 1. LIMPEZA E SUBMÓDULOS MANUAIS
+    # Baixamos apenas o que o Windows precisa, ignorando Android/Switch para não dar erro
+    - name: Setup Environment
       run: |
         Remove-Item -Recurse -Force ./switch -ErrorAction Ignore
         Remove-Item -Recurse -Force ./android -ErrorAction Ignore
         $env:PYTHONPATH=""
+        git submodule update --init --recursive third-party/nanopb
+        git submodule update --init --recursive third-party/curl
+        git submodule update --init --recursive third-party/jerasure
+        git submodule update --init --recursive third-party/gf-complete
+        git submodule update --init --recursive third-party/cpp-steam-tools
 
-    # 2. CACHE VCPKG: Importante! Se o build passar, isso vai salvar tudo para a próxima vez
-    - name: Restore vcpkg Cache
-      uses: actions/cache@v4
-      with:
-        path: |
-          C:/vcpkg/installed
-          C:/vcpkg/packages
-        key: vcpkg-${{ runner.os }}-control-v4
-
-    # 3. PYTHON: A CORREÇÃO PRINCIPAL ESTÁ AQUI
+    # 2. PYTHON 3.10 + FIX DE CAMINHO
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.10' # Usando 3.10 para maior compatibilidade
+        python-version: '3.10' 
 
     - name: Install Python Dependencies
       run: |
-        # Downgrade para protobuf 3.20.x resolve o erro "MakeClass"
+        # Versão 3.20.3 é CRÍTICA para evitar o erro 'MakeClass'
         pip install protobuf==3.20.3 grpcio-tools nanopb
 
-    # 4. QT: Instalação base (sem especificar módulos para evitar erro)
+    # 3. QT BASE (Sem módulos extras para evitar erro)
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
         version: '6.6.0'
         arch: 'win64_msvc2019_64'
-        # Deixamos sem 'modules' para baixar o padrão seguro
 
-    # 5. SDL2: Instalação via vcpkg
+    # 4. SDL2 (Única coisa pesada que o VCPKG deve instalar)
     - name: Install SDL2
       run: |
         vcpkg install sdl2:x64-windows --classic
 
-    # 6. CMAKE: Configuração
+    # 5. CMAKE OTIMIZADO (A MÁGICA DA VELOCIDADE)
+    # Adicionei várias flags 'USE_SYSTEM...=OFF'. 
+    # Isso diz ao Chiaki: "Não peça ao vcpkg para baixar OpenSSL/Curl/Protobuf, use os arquivos locais".
+    # Também fixamos o Python_EXECUTABLE para corrigir o erro 'No module named google'.
     - name: Configure CMake
       run: |
         cmake -B build `
+          -DPython_EXECUTABLE="$env:pythonLocation\python.exe" `
           -DCHIAKI_ENABLE_GUI=ON `
           -DCHIAKI_ENABLE_CLI=OFF `
           -DCHIAKI_ENABLE_TESTS=OFF `
@@ -67,15 +68,19 @@ jobs:
           -DCHIAKI_ENABLE_STEAMDECK_NATIVE=OFF `
           -DCHIAKI_USE_WEBENGINE=OFF `
           -DCHIAKI_ENABLE_BOREALIS=OFF `
+          -DCHIAKI_ENABLE_ANDROID=OFF `
+          -DCHIAKI_USE_SYSTEM_NANOPB=OFF `
+          -DCHIAKI_USE_SYSTEM_JERASURE=OFF `
+          -DCHIAKI_USE_SYSTEM_CURL=OFF `
           -DCMAKE_BUILD_TYPE=Release `
           -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
           -DVCPKG_TARGET_TRIPLET=x64-windows
 
-    # 7. BUILD
+    # 6. BUILD
     - name: Build
       run: cmake --build build --config Release --parallel 4
 
-    # 8. DOWNLOAD
+    # 7. DOWNLOAD
     - name: Upload Executable
       uses: actions/upload-artifact@v4
       with:
