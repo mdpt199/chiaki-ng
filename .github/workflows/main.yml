@@ -12,49 +12,60 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        submodules: false # Vamos baixar só o necessário manualmente
+        submodules: false # Download manual para controle total
         fetch-depth: 0
 
-    # 1. LIMPEZA E SUBMÓDULOS MANUAIS
-    # Baixamos apenas o que o Windows precisa, ignorando Android/Switch para não dar erro
-    - name: Setup Environment
+    # 1. LIMPEZA TOTAL (A Chave da Velocidade)
+    # Deletamos o vcpkg.json para impedir que ele baixe bibliotecas inúteis (Vulkan, FFTW, etc)
+    - name: Cleanup Bloatware
       run: |
         Remove-Item -Recurse -Force ./switch -ErrorAction Ignore
         Remove-Item -Recurse -Force ./android -ErrorAction Ignore
+        if (Test-Path vcpkg.json) { Remove-Item -Force vcpkg.json }
         $env:PYTHONPATH=""
+        
+        # Baixa apenas os submódulos vitais
         git submodule update --init --recursive third-party/nanopb
         git submodule update --init --recursive third-party/curl
         git submodule update --init --recursive third-party/jerasure
         git submodule update --init --recursive third-party/gf-complete
         git submodule update --init --recursive third-party/cpp-steam-tools
 
-    # 2. PYTHON 3.10 + FIX DE CAMINHO
+    # 2. CONFIGURAÇÃO PYTHON (Corrige o erro 'MakeClass')
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.10' 
+        python-version: '3.10' # 3.10 é mais estável para builds antigos
 
     - name: Install Python Dependencies
       run: |
-        # Versão 3.20.3 é CRÍTICA para evitar o erro 'MakeClass'
+        # Essa versão exata conserta o erro do Nanopb Generator
         pip install protobuf==3.20.3 grpcio-tools nanopb
 
-    # 3. QT BASE (Sem módulos extras para evitar erro)
+    # 3. CACHE INTELIGENTE
+    - name: Restore vcpkg Cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          C:/vcpkg/installed
+          C:/vcpkg/packages
+        key: vcpkg-fast-control-v1
+
+    # 4. INSTALAÇÃO MANUAL (Só o essencial)
+    # Como deletamos o vcpkg.json, precisamos instalar SDL2 e OpenSSL manualmente
+    - name: Install Dependencies
+      run: |
+        vcpkg install sdl2:x64-windows openssl:x64-windows --classic
+
+    # 5. INSTALAÇÃO QT (Pacote Base)
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
         version: '6.6.0'
         arch: 'win64_msvc2019_64'
 
-    # 4. SDL2 (Única coisa pesada que o VCPKG deve instalar)
-    - name: Install SDL2
-      run: |
-        vcpkg install sdl2:x64-windows --classic
-
-    # 5. CMAKE OTIMIZADO (A MÁGICA DA VELOCIDADE)
-    # Adicionei várias flags 'USE_SYSTEM...=OFF'. 
-    # Isso diz ao Chiaki: "Não peça ao vcpkg para baixar OpenSSL/Curl/Protobuf, use os arquivos locais".
-    # Também fixamos o Python_EXECUTABLE para corrigir o erro 'No module named google'.
+    # 6. CMAKE TURBO
+    # Desativamos tudo que é "SYSTEM" para usar as versões internas (que compilam rápido)
     - name: Configure CMake
       run: |
         cmake -B build `
@@ -76,11 +87,11 @@ jobs:
           -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
           -DVCPKG_TARGET_TRIPLET=x64-windows
 
-    # 6. BUILD
+    # 7. COMPILAÇÃO
     - name: Build
       run: cmake --build build --config Release --parallel 4
 
-    # 7. DOWNLOAD
+    # 8. DOWNLOAD
     - name: Upload Executable
       uses: actions/upload-artifact@v4
       with:
