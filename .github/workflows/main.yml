@@ -1,4 +1,4 @@
-name: Build Chiaki Windows (Control Only)
+name: Build Chiaki Windows (CONTROLE PURO)
 
 on:
   push:
@@ -12,23 +12,23 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        submodules: false
+        submodules: false # Manual para garantir limpeza total
         fetch-depth: 0
 
-    # 1. REMOÇÃO FÍSICA RADICAL (Para matar o erro das fotos)
-    - name: Setup Environment and Purge Modules
+    # 1. REMOÇÃO FÍSICA RADICAL (O fim dos erros das fotos)
+    - name: Purge Problematic Modules
       run: |
-        # Deletamos as pastas que causam erro e que você não quer usar
+        # Deleta as pastas que falharam nas suas fotos e as que você não quer (Áudio/Vídeo)
         Remove-Item -Recurse -Force ./switch, ./android, ./third-party/cpp-steam-tools -ErrorAction Ignore
         if (Test-Path vcpkg.json) { Remove-Item -Force vcpkg.json }
         
-        # Baixamos apenas o núcleo de rede
+        # Baixa apenas o núcleo mínimo de rede
         git submodule update --init --recursive third-party/nanopb
         git submodule update --init --recursive third-party/curl
         git submodule update --init --recursive third-party/jerasure
         git submodule update --init --recursive third-party/gf-complete
         
-        # VACINA PARA O CMAKE: Criamos um arquivo fantasma para ele não reclamar da pasta Steam
+        # ENGANA O CMAKE: Cria um arquivo vazio para ele ignorar a Steam sem dar erro de pasta ausente
         New-Item -Path "third-party/cpp-steam-tools" -ItemType Directory -Force
         New-Item -Path "third-party/cpp-steam-tools/CMakeLists.txt" -ItemType File -Value "" -Force
 
@@ -36,39 +36,38 @@ jobs:
     - name: Install Native Tools
       run: choco install protoc --no-progress
 
-    # 3. PYTHON (3.10 estável)
+    # 3. PYTHON BÁSICO
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
+    - run: pip install protobuf==3.20.3 grpcio-tools nanopb
 
-    # 4. CACHE VCPKG (v23)
+    # 4. CACHE VCPKG (v24)
     - name: Restore vcpkg Cache
       uses: actions/cache@v4
       with:
         path: |
           C:/vcpkg/installed
           C:/vcpkg/packages
-        key: vcpkg-control-only-v23
+        key: vcpkg-control-only-v24
 
-    # 5. DEPENDÊNCIAS C++ (Apenas o mínimo)
+    # 5. DEPENDÊNCIAS C++
     - name: Install Dependencies
-      run: |
-        vcpkg install sdl2:x64-windows openssl:x64-windows pkgconf:x64-windows json-c:x64-windows miniupnpc:x64-windows nanopb:x64-windows --classic
+      run: vcpkg install sdl2:x64-windows openssl:x64-windows pkgconf:x64-windows json-c:x64-windows miniupnpc:x64-windows nanopb:x64-windows --classic
 
-    # 6. QT BASE (Para a janelinha)
+    # 6. QT BASE
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
         version: '6.6.0'
         arch: 'win64_msvc2019_64'
 
-    # 7. PATCH NO NANOPB (Evita erro de linkagem)
-    - name: Patch CMake for Nanopb
-      run: |
-        (Get-Content lib/CMakeLists.txt) -replace 'Nanopb::nanopb', 'nanopb' | Set-Content lib/CMakeLists.txt
+    # 7. PATCH DE LINKAGEM
+    - name: Patch Nanopb Link
+      run: (Get-Content lib/CMakeLists.txt) -replace 'Nanopb::nanopb', 'nanopb' | Set-Content lib/CMakeLists.txt
 
-    # 8. CONFIGURE CMAKE (DESLIGANDO TUDO: Áudio, Vídeo e Steam)
+    # 8. CONFIGURE CMAKE (EXTERMINANDO ÁUDIO, VÍDEO E STEAM)
     - name: Configure CMake
       run: |
         $python_exe = (Get-Command python).Source
@@ -94,10 +93,9 @@ jobs:
     - name: Build
       run: cmake --build build --config Release --parallel 4
 
-    # 10. DOWNLOAD DO CHIANKI.EXE
+    # 10. DOWNLOAD
     - name: Upload Executable
       uses: actions/upload-artifact@v4
       with:
         name: Chiaki-Somente-Controle
         path: build/gui/Release/chiaki.exe
-        
