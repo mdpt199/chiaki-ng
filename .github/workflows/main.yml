@@ -15,7 +15,7 @@ jobs:
         submodules: false
         fetch-depth: 0
 
-    # 1. LIMPEZA E SUBMÓDULOS MANUAIS
+    # 1. LIMPEZA E SUBMÓDULOS
     - name: Setup Environment
       run: |
         Remove-Item -Recurse -Force ./switch -ErrorAction Ignore
@@ -32,39 +32,49 @@ jobs:
     - name: Install Native Tools
       run: choco install protoc --no-progress
 
-    # 3. PYTHON (3.10 para estabilidade)
+    # 3. PYTHON (3.10 para estabilidade máxima com Nanopb)
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
 
+    # 4. INSTALAÇÃO BLINDADA (Instala dentro da pasta do Nanopb para não ter erro de PATH)
     - name: Install Python Dependencies
       run: |
         python -m pip install --upgrade pip
-        python -m pip install protobuf==3.20.3 grpcio-tools nanopb
+        # Instala as dependências dentro da pasta do gerador
+        python -m pip install protobuf==3.20.3 grpcio-tools nanopb -t third-party/nanopb/generator
 
-    # 4. CACHE VCPKG (Incrementado para v9)
+    # 5. CACHE VCPKG (v10)
     - name: Restore vcpkg Cache
       uses: actions/cache@v4
       with:
         path: |
           C:/vcpkg/installed
           C:/vcpkg/packages
-        key: vcpkg-fast-control-v9
+        key: vcpkg-fast-control-v10
 
-    # 5. DEPENDÊNCIAS C++
+    # 6. DEPENDÊNCIAS C++
     - name: Install Dependencies
       run: |
-        vcpkg install sdl2:x64-windows openssl:x64-windows pkgconf:x64-windows json-c:x64-windows miniupnpc:x64-windows nanopb:x64-windows --classic
+        vcpkg install sdl2:x64-windows openssl:x64-windows pkgconf:x64-windows json-c:x64-windows miniupnpc:x64-windows --classic
 
-    # 6. QT BASE
+    # 7. QT BASE
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
         version: '6.6.0'
         arch: 'win64_msvc2019_64'
 
-    # 7. CONFIGURE CMAKE
+    # 8. GERAÇÃO MANUAL (Com PYTHONPATH forçado para a pasta local)
+    - name: Manual Nanopb Generation
+      run: |
+        $env:PYTHONPATH = "third-party/nanopb/generator"
+        $gen = "third-party/nanopb/generator/nanopb_generator.py"
+        $proto = "lib/protobuf/takion.proto"
+        python $gen -I lib/protobuf $proto
+
+    # 9. CONFIGURE CMAKE
     - name: Configure CMake
       run: |
         $python_exe = (Get-Command python).Source
@@ -87,20 +97,11 @@ jobs:
           -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
           -DVCPKG_TARGET_TRIPLET=x64-windows
 
-    # 8. GERAÇÃO MANUAL DO NANOPB (A SOLUÇÃO REAL)
-    # Rodamos o gerador aqui no shell do GitHub, onde o Python funciona com as libs.
-    # Isso cria os arquivos takion.pb.c e .h ANTES do Build começar.
-    - name: Manual Nanopb Generation
-      run: |
-        $gen = "third-party/nanopb/generator/nanopb_generator.py"
-        $proto = "lib/protobuf/takion.proto"
-        python $gen -I lib/protobuf $proto
-
-    # 9. BUILD
+    # 10. BUILD
     - name: Build
       run: cmake --build build --config Release --parallel 4
 
-    # 10. ARTEFATO
+    # 11. ARTEFATO
     - name: Upload Executable
       uses: actions/upload-artifact@v4
       with:
