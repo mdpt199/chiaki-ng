@@ -15,20 +15,19 @@ jobs:
         submodules: false
         fetch-depth: 0
 
-    # 1. SETUP AMBIENTE & LIMPEZA CRÍTICA
+    # 1. SETUP AMBIENTE & LIMPEZA
     - name: Setup Environment
       run: |
         Remove-Item -Recurse -Force ./switch, ./android -ErrorAction Ignore
         if (Test-Path vcpkg.json) { Remove-Item -Force vcpkg.json }
         
-        # Baixa submódulos, mas VAMOS DELETAR o gerador Python para forçar o uso do binário
         git submodule update --init --recursive third-party/nanopb
         git submodule update --init --recursive third-party/curl
         git submodule update --init --recursive third-party/jerasure
         git submodule update --init --recursive third-party/gf-complete
         git submodule update --init --recursive third-party/cpp-steam-tools
         
-        # DELETA o gerador Python problemático para o CMake usar o Nanopb do vcpkg
+        # Removemos o gerador Python para não haver conflito
         Remove-Item -Recurse -Force third-party/nanopb/generator -ErrorAction Ignore
 
     # 2. FERRAMENTAS NATIVAS
@@ -43,19 +42,16 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Install Python Dependencies
-      run: pip install protobuf==3.20.3 grpcio-tools nanopb
-
-    # 4. CACHE VCPKG (v12)
+    # 4. CACHE VCPKG (v13)
     - name: Restore vcpkg Cache
       uses: actions/cache@v4
       with:
         path: |
           C:/vcpkg/installed
           C:/vcpkg/packages
-        key: vcpkg-fast-control-v12
+        key: vcpkg-fast-control-v13
 
-    # 5. DEPENDÊNCIAS C++ (Nanopb via vcpkg é obrigatório aqui)
+    # 5. DEPENDÊNCIAS C++
     - name: Install Dependencies
       run: |
         vcpkg install sdl2:x64-windows openssl:x64-windows pkgconf:x64-windows json-c:x64-windows miniupnpc:x64-windows nanopb:x64-windows --classic
@@ -67,7 +63,14 @@ jobs:
         version: '6.6.0'
         arch: 'win64_msvc2019_64'
 
-    # 7. CONFIGURE CMAKE (FORÇANDO USO DO NANOPB DO SISTEMA)
+    # 7. CORREÇÃO DE LINK DO NANOPB (PATCH)
+    # O vcpkg chama a lib de 'nanopb::nanopb-static' ou similar. 
+    # Vamos forçar o CMake a entender o link correto.
+    - name: Patch CMake for Nanopb
+      run: |
+        (Get-Content lib/CMakeLists.txt) -replace 'Nanopb::nanopb', 'nanopb' | Set-Content lib/CMakeLists.txt
+
+    # 8. CONFIGURE CMAKE
     - name: Configure CMake
       run: |
         $python_exe = (Get-Command python).Source
@@ -90,11 +93,11 @@ jobs:
           -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
           -DVCPKG_TARGET_TRIPLET=x64-windows
 
-    # 8. BUILD
+    # 9. BUILD
     - name: Build
       run: cmake --build build --config Release --parallel 4
 
-    # 9. ARTEFATO
+    # 10. ARTEFATO
     - name: Upload Executable
       uses: actions/upload-artifact@v4
       with:
