@@ -15,14 +15,12 @@ jobs:
         submodules: false
         fetch-depth: 0
 
-    # 1. CLEANUP & MANUAL SUBMODULES
-    # Removes unnecessary platforms and downloads only Windows-required deps to prevent errors.
-    - name: Setup Environment
+    # 1. LIMPEZA E SUBMÓDULOS (Mantido para velocidade)
+    - name: Cleanup Bloatware
       run: |
         Remove-Item -Recurse -Force ./switch -ErrorAction Ignore
         Remove-Item -Recurse -Force ./android -ErrorAction Ignore
         if (Test-Path vcpkg.json) { Remove-Item -Force vcpkg.json }
-        $env:PYTHONPATH=""
         
         git submodule update --init --recursive third-party/nanopb
         git submodule update --init --recursive third-party/curl
@@ -30,12 +28,11 @@ jobs:
         git submodule update --init --recursive third-party/gf-complete
         git submodule update --init --recursive third-party/cpp-steam-tools
 
-    # 2. INSTALL PROTOC (NATIVE)
-    # Critical: Installs the protoc.exe compiler directly, bypassing Python version issues.
+    # 2. INSTALA O PROTOC (Obrigatório para o CMake)
     - name: Install Protoc
       run: choco install protoc --no-progress
 
-    # 3. SETUP PYTHON
+    # 3. PYTHON (Usando a versão 3.10 para estabilidade)
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
@@ -43,37 +40,38 @@ jobs:
 
     - name: Install Python Dependencies
       run: |
-        pip install protobuf==3.20.3 grpcio-tools nanopb
+        # Usamos python -m pip para garantir que instale na versão correta
+        python -m pip install --upgrade pip
+        python -m pip install protobuf==3.20.3 grpcio-tools nanopb
 
-    # 4. VCPKG CACHE
+    # 4. CACHE VCPKG
     - name: Restore vcpkg Cache
       uses: actions/cache@v4
       with:
         path: |
           C:/vcpkg/installed
           C:/vcpkg/packages
-        key: vcpkg-fast-control-v4
+        key: vcpkg-fast-control-v5
 
-    # 5. INSTALL LIGHTWEIGHT DEPENDENCIES
-    # Installs only what is strictly needed. 'pkgconf' fixes the CMake search error.
-    # 'json-c' and 'miniupnpc' are added to satisfy Chiaki's requirements.
+    # 5. DEPENDÊNCIAS C++
     - name: Install Dependencies
       run: |
         vcpkg install sdl2:x64-windows openssl:x64-windows pkgconf:x64-windows json-c:x64-windows miniupnpc:x64-windows --classic
 
-    # 6. INSTALL QT (BASE)
+    # 6. QT BASE
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
         version: '6.6.0'
         arch: 'win64_msvc2019_64'
 
-    # 7. CONFIGURE CMAKE
-    # Forces use of local submodules and disables all heavy multimedia features.
+    # 7. CMAKE (A CORREÇÃO PRINCIPAL ESTÁ NO -DPython_EXECUTABLE)
     - name: Configure CMake
       run: |
+        # Pegamos o caminho real do Python configurado no passo 3
+        $python_path = (Get-Command python).Source
         cmake -B build `
-          -DPython_EXECUTABLE="$env:pythonLocation\python.exe" `
+          -DPython_EXECUTABLE="$python_path" `
           -DCHIAKI_ENABLE_GUI=ON `
           -DCHIAKI_ENABLE_CLI=OFF `
           -DCHIAKI_ENABLE_TESTS=OFF `
@@ -95,7 +93,7 @@ jobs:
     - name: Build
       run: cmake --build build --config Release --parallel 4
 
-    # 9. UPLOAD ARTIFACT
+    # 9. DOWNLOAD
     - name: Upload Executable
       uses: actions/upload-artifact@v4
       with:
