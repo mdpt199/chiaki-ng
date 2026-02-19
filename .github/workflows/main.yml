@@ -15,7 +15,7 @@ jobs:
         submodules: false
         fetch-depth: 0
 
-    # 1. SETUP AMBIENTE E REMOÇÃO DE LIXO
+    # 1. SETUP AMBIENTE
     - name: Setup Environment
       run: |
         Remove-Item -Recurse -Force ./switch, ./android, ./third-party/cpp-steam-tools -ErrorAction Ignore
@@ -26,31 +26,36 @@ jobs:
         git submodule update --init --recursive third-party/jerasure
         git submodule update --init --recursive third-party/gf-complete
         
-        # Vacina para a pasta Steam
         New-Item -Path "third-party/cpp-steam-tools" -ItemType Directory -Force
         New-Item -Path "third-party/cpp-steam-tools/CMakeLists.txt" -ItemType File -Value "" -Force
 
-    # 2. FIX DO CMAKELISTS (Versão Ultra-Segura contra Erros de Parse)
+    # 2. PATCH DO CMAKELISTS (CORREÇÃO DO COMANDO DESCONHECIDO)
     - name: Patch Protobuf CMake
       run: |
         $path = "lib/protobuf/CMakeLists.txt"
+        # Adicionamos a inclusão explícita do arquivo de macros do Nanopb
         $content = @'
         find_package(nanopb CONFIG REQUIRED)
+        include(${nanopb_DIR}/nanopb-targets.cmake)
+        # Forçamos a localização do arquivo de macro caso o vcpkg não o tenha registrado globalmente
+        include(nanopb-macros OPTIONAL) 
+        
         nanopb_generate_cpp(TAKION_PROTO_SRCS TAKION_PROTO_HDRS TAKION_PROTO_OPTIONS takion.proto)
+        
         add_library(chiaki-pb STATIC ${TAKION_PROTO_SRCS} ${TAKION_PROTO_HDRS})
         target_link_libraries(chiaki-pb PUBLIC nanopb::protobuf-nanopb-static)
         target_include_directories(chiaki-pb PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
         '@
         Set-Content -Path $path -Value $content -Encoding UTF8
 
-    # 3. FIX DE CODIFICAÇÃO DO PROTO (Elimina o 0xAA)
+    # 3. FIX DE CODIFICAÇÃO (0xAA)
     - name: Fix Proto Encoding
       run: |
         $protoPath = "lib/protobuf/takion.proto"
         $content = Get-Content $protoPath -Raw
         [System.IO.File]::WriteAllText($protoPath, $content, (New-Object System.Text.UTF8Encoding($false)))
 
-    # 4. FERRAMENTAS NATIVAS E PYTHON UTF-8
+    # 4. FERRAMENTAS E PYTHON
     - name: Install Native Tools
       run: choco install protoc --no-progress
     
@@ -64,26 +69,25 @@ jobs:
         echo "PYTHONUTF8=1" >> $env:GITHUB_ENV
         echo "PYTHONIOENCODING=utf-8" >> $env:GITHUB_ENV
 
-    # 5. DEPENDÊNCIAS VIA VCPKG
+    # 5. DEPENDÊNCIAS VCPKG
     - name: Restore vcpkg Cache
       uses: actions/cache@v4
       with:
         path: |
           C:/vcpkg/installed
           C:/vcpkg/packages
-        key: vcpkg-pure-control-v31
+        key: vcpkg-pure-control-v32
 
     - name: Install Dependencies
       run: vcpkg install sdl2:x64-windows openssl:x64-windows pkgconf:x64-windows json-c:x64-windows miniupnpc:x64-windows nanopb:x64-windows --classic
 
-    # 6. INSTALAÇÃO DO QT
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
         version: '6.6.0'
         arch: 'win64_msvc2019_64'
 
-    # 7. CONFIGURE CMAKE
+    # 6. CONFIGURE CMAKE
     - name: Configure CMake
       run: |
         $python_exe = (Get-Command python).Source
@@ -103,11 +107,10 @@ jobs:
           -DVCPKG_TARGET_TRIPLET=x64-windows `
           -DCMAKE_CXX_FLAGS="/utf-8"
 
-    # 8. BUILD FINAL
+    # 7. BUILD E ARTEFATO
     - name: Build
       run: cmake --build build --config Release --parallel 4
 
-    # 9. ARTEFATO FINAL
     - name: Upload Executable
       uses: actions/upload-artifact@v4
       with:
