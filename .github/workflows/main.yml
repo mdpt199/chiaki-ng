@@ -12,72 +12,57 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        submodules: false # Desativamos o download automático para limpar a pasta
+        submodules: false
         fetch-depth: 0
 
-    # 1. LIMPEZA E VACINA (Elimina a Steam e o Nanopb problemático)
-    - name: Setup Environment and Bypass Errors
+    # 1. AMBIENTE & LIMPEZA (Removemos a Steam para evitar o erro da DLL)
+    - name: Setup Environment
       run: |
-        # Remove plataformas inúteis
         Remove-Item -Recurse -Force ./switch, ./android -ErrorAction Ignore
         if (Test-Path vcpkg.json) { Remove-Item -Force vcpkg.json }
         
-        # Baixa apenas o necessário para o controle
         git submodule update --init --recursive third-party/nanopb
         git submodule update --init --recursive third-party/curl
         git submodule update --init --recursive third-party/jerasure
         git submodule update --init --recursive third-party/gf-complete
         
-        # A SOLUÇÃO DEFINITIVA PARA A IMAGEM: Criamos uma pasta Steam "falsa" e vazia
-        # Isso impede o CMake de tentar compilar a DLL que está falhando nas suas fotos
+        # VACINA: Evita erro de diretório vazio na Steam
         New-Item -Path "third-party/cpp-steam-tools" -ItemType Directory -Force
         New-Item -Path "third-party/cpp-steam-tools/CMakeLists.txt" -ItemType File -Value "" -Force
 
     # 2. FERRAMENTAS NATIVAS
     - name: Install Native Tools
-      run: |
-        choco install protoc --no-progress
-        echo "C:\ProgramData\chocolatey\bin" >> $env:GITHUB_PATH
+      run: choco install protoc --no-progress
 
-    # 3. PYTHON BÁSICO
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-
-    - name: Install Python Dependencies
-      run: pip install protobuf==3.20.3 grpcio-tools nanopb
-
-    # 4. CACHE VCPKG (v17)
+    # 3. CACHE VCPKG (v18)
     - name: Restore vcpkg Cache
       uses: actions/cache@v4
       with:
         path: |
           C:/vcpkg/installed
           C:/vcpkg/packages
-        key: vcpkg-fast-control-v17
+        key: vcpkg-fast-control-v18
 
-    # 5. DEPENDÊNCIAS C++
+    # 4. DEPENDÊNCIAS C++ (Nanopb via vcpkg é a chave aqui)
     - name: Install Dependencies
       run: |
         vcpkg install sdl2:x64-windows openssl:x64-windows pkgconf:x64-windows json-c:x64-windows miniupnpc:x64-windows nanopb:x64-windows --classic
 
-    # 6. QT BASE
+    # 5. QT BASE
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
         version: '6.6.0'
         arch: 'win64_msvc2019_64'
 
-    # 7. PATCH NO LINK DO NANOPB
+    # 6. PATCH DE LINK (Corrige o erro de "Target Nanopb::nanopb not found")
     - name: Patch CMake for Nanopb
       run: |
         (Get-Content lib/CMakeLists.txt) -replace 'Nanopb::nanopb', 'nanopb' | Set-Content lib/CMakeLists.txt
 
-    # 8. CONFIGURE CMAKE (AQUI MATAMOS O SUPORTE À STEAM)
+    # 7. CONFIGURE CMAKE (Configuração Ultra-Limpa)
     - name: Configure CMake
       run: |
-        $python_exe = (Get-Command python).Source
         cmake -B build `
           -DCHIAKI_ENABLE_GUI=ON `
           -DCHIAKI_ENABLE_CLI=OFF `
@@ -92,15 +77,14 @@ jobs:
           -DCHIAKI_USE_SYSTEM_NANOPB=ON `
           -DCHIAKI_ENABLE_STEAM_SUPPORT=OFF `
           -DCMAKE_BUILD_TYPE=Release `
-          -DPython_EXECUTABLE="$python_exe" `
           -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
           -DVCPKG_TARGET_TRIPLET=x64-windows
 
-    # 9. BUILD
+    # 8. BUILD
     - name: Build
       run: cmake --build build --config Release --parallel 4
 
-    # 10. ARTEFATO
+    # 9. ARTEFATO
     - name: Upload Executable
       uses: actions/upload-artifact@v4
       with:
