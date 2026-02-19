@@ -15,8 +15,8 @@ jobs:
         submodules: false
         fetch-depth: 0
 
-    # 1. LIMPEZA E SUBMÓDULOS (Mantido para velocidade)
-    - name: Cleanup Bloatware
+    # 1. LIMPEZA E SUBMÓDULOS
+    - name: Setup Environment
       run: |
         Remove-Item -Recurse -Force ./switch -ErrorAction Ignore
         Remove-Item -Recurse -Force ./android -ErrorAction Ignore
@@ -28,50 +28,49 @@ jobs:
         git submodule update --init --recursive third-party/gf-complete
         git submodule update --init --recursive third-party/cpp-steam-tools
 
-    # 2. INSTALA O PROTOC (Obrigatório para o CMake)
+    # 2. PROTOC NATIVO (Chocolatey)
     - name: Install Protoc
       run: choco install protoc --no-progress
 
-    # 3. PYTHON (Usando a versão 3.10 para estabilidade)
+    # 3. PYTHON 3.10 (Instalação limpa)
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
 
+    # 4. DEPENDÊNCIAS PYTHON (Garante que o módulo google esteja lá)
     - name: Install Python Dependencies
       run: |
-        # Usamos python -m pip para garantir que instale na versão correta
         python -m pip install --upgrade pip
         python -m pip install protobuf==3.20.3 grpcio-tools nanopb
 
-    # 4. CACHE VCPKG
+    # 5. CACHE VCPKG (v6)
     - name: Restore vcpkg Cache
       uses: actions/cache@v4
       with:
         path: |
           C:/vcpkg/installed
           C:/vcpkg/packages
-        key: vcpkg-fast-control-v5
+        key: vcpkg-fast-control-v6
 
-    # 5. DEPENDÊNCIAS C++
+    # 6. DEPENDÊNCIAS C++
+    # Adicionamos 'nanopb' via vcpkg para substituir o gerador manual que está falhando
     - name: Install Dependencies
       run: |
-        vcpkg install sdl2:x64-windows openssl:x64-windows pkgconf:x64-windows json-c:x64-windows miniupnpc:x64-windows --classic
+        vcpkg install sdl2:x64-windows openssl:x64-windows pkgconf:x64-windows json-c:x64-windows miniupnpc:x64-windows nanopb:x64-windows --classic
 
-    # 6. QT BASE
+    # 7. QT BASE
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
         version: '6.6.0'
         arch: 'win64_msvc2019_64'
 
-    # 7. CMAKE (A CORREÇÃO PRINCIPAL ESTÁ NO -DPython_EXECUTABLE)
+    # 8. CONFIGURE CMAKE (Ajustado para forçar o Python correto)
     - name: Configure CMake
       run: |
-        # Pegamos o caminho real do Python configurado no passo 3
-        $python_path = (Get-Command python).Source
+        $python_exe = (Get-Command python).Source
         cmake -B build `
-          -DPython_EXECUTABLE="$python_path" `
           -DCHIAKI_ENABLE_GUI=ON `
           -DCHIAKI_ENABLE_CLI=OFF `
           -DCHIAKI_ENABLE_TESTS=OFF `
@@ -86,14 +85,15 @@ jobs:
           -DCHIAKI_USE_SYSTEM_JERASURE=OFF `
           -DCHIAKI_USE_SYSTEM_CURL=OFF `
           -DCMAKE_BUILD_TYPE=Release `
+          -DPython_EXECUTABLE="$python_exe" `
           -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
           -DVCPKG_TARGET_TRIPLET=x64-windows
 
-    # 8. BUILD
+    # 9. BUILD
     - name: Build
       run: cmake --build build --config Release --parallel 4
 
-    # 9. DOWNLOAD
+    # 10. DOWNLOAD ARTIFACT
     - name: Upload Executable
       uses: actions/upload-artifact@v4
       with:
