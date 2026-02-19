@@ -15,8 +15,8 @@ jobs:
         submodules: false
         fetch-depth: 0
 
-    # 1. LIMPEZA E PREPARAÇÃO
-    - name: Setup Environment and Purge Modules
+    # 1. SETUP AMBIENTE E REMOÇÃO DE LIXO
+    - name: Setup Environment
       run: |
         Remove-Item -Recurse -Force ./switch, ./android, ./third-party/cpp-steam-tools -ErrorAction Ignore
         if (Test-Path vcpkg.json) { Remove-Item -Force vcpkg.json }
@@ -26,32 +26,31 @@ jobs:
         git submodule update --init --recursive third-party/jerasure
         git submodule update --init --recursive third-party/gf-complete
         
-        # Vacina para evitar erro de pasta ausente
+        # Vacina para a pasta Steam
         New-Item -Path "third-party/cpp-steam-tools" -ItemType Directory -Force
         New-Item -Path "third-party/cpp-steam-tools/CMakeLists.txt" -ItemType File -Value "" -Force
 
-    # 2. REESCRITA DO CMAKELISTS (A CORREÇÃO QUE VOCÊ PEDIU)
-    # Aqui substituímos a lógica quebrada por uma que usa o Nanopb do sistema
+    # 2. FIX DO CMAKELISTS (Versão Ultra-Segura contra Erros de Parse)
     - name: Patch Protobuf CMake
       run: |
-        $cmakePath = "lib/protobuf/CMakeLists.txt"
-        $newContent = @"
+        $path = "lib/protobuf/CMakeLists.txt"
+        $content = @'
         find_package(nanopb CONFIG REQUIRED)
         nanopb_generate_cpp(TAKION_PROTO_SRCS TAKION_PROTO_HDRS TAKION_PROTO_OPTIONS takion.proto)
-        add_library(chiaki-pb STATIC \${TAKION_PROTO_SRCS} \${TAKION_PROTO_HDRS})
+        add_library(chiaki-pb STATIC ${TAKION_PROTO_SRCS} ${TAKION_PROTO_HDRS})
         target_link_libraries(chiaki-pb PUBLIC nanopb::protobuf-nanopb-static)
-        target_include_directories(chiaki-pb PUBLIC \${CMAKE_CURRENT_BINARY_DIR})
-        "@
-        Set-Content -Path $cmakePath -Value $newContent -Encoding UTF8
+        target_include_directories(chiaki-pb PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
+        '@
+        Set-Content -Path $path -Value $content -Encoding UTF8
 
-    # 3. FIX DE CODIFICAÇÃO DO PROTO (Garante UTF-8 puro)
+    # 3. FIX DE CODIFICAÇÃO DO PROTO (Elimina o 0xAA)
     - name: Fix Proto Encoding
       run: |
-        $path = "lib/protobuf/takion.proto"
-        $content = Get-Content $path -Raw
-        [System.IO.File]::WriteAllText($path, $content, (New-Object System.Text.UTF8Encoding($false)))
+        $protoPath = "lib/protobuf/takion.proto"
+        $content = Get-Content $protoPath -Raw
+        [System.IO.File]::WriteAllText($protoPath, $content, (New-Object System.Text.UTF8Encoding($false)))
 
-    # 4. FERRAMENTAS NATIVAS E PYTHON
+    # 4. FERRAMENTAS NATIVAS E PYTHON UTF-8
     - name: Install Native Tools
       run: choco install protoc --no-progress
     
@@ -72,18 +71,19 @@ jobs:
         path: |
           C:/vcpkg/installed
           C:/vcpkg/packages
-        key: vcpkg-pure-control-v30
+        key: vcpkg-pure-control-v31
 
     - name: Install Dependencies
       run: vcpkg install sdl2:x64-windows openssl:x64-windows pkgconf:x64-windows json-c:x64-windows miniupnpc:x64-windows nanopb:x64-windows --classic
 
+    # 6. INSTALAÇÃO DO QT
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
         version: '6.6.0'
         arch: 'win64_msvc2019_64'
 
-    # 6. CONFIGURE E BUILD (Tudo desativado, menos o essencial)
+    # 7. CONFIGURE CMAKE
     - name: Configure CMake
       run: |
         $python_exe = (Get-Command python).Source
@@ -96,18 +96,20 @@ jobs:
           -DCHIAKI_ENABLE_SPEEX=OFF `
           -DCHIAKI_ENABLE_STEAM_SUPPORT=OFF `
           -DCHIAKI_USE_SYSTEM_NANOPB=ON `
+          -DCHIAKI_USE_SYSTEM_CURL=OFF `
           -DCMAKE_BUILD_TYPE=Release `
           -DPython_EXECUTABLE="$python_exe" `
           -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
           -DVCPKG_TARGET_TRIPLET=x64-windows `
           -DCMAKE_CXX_FLAGS="/utf-8"
 
+    # 8. BUILD FINAL
     - name: Build
       run: cmake --build build --config Release --parallel 4
 
-    # 7. ARTEFATO FINAL
+    # 9. ARTEFATO FINAL
     - name: Upload Executable
       uses: actions/upload-artifact@v4
       with:
-        name: Chiaki-Controle-Final
+        name: Chiaki-Controle-Puro
         path: build/gui/Release/chiaki.exe
