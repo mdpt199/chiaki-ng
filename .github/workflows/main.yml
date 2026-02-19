@@ -12,24 +12,24 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        submodules: false # Controle manual para evitar erros de git
+        submodules: false # Desativamos o download automático para limpar a pasta
         fetch-depth: 0
 
-    # 1. SETUP AMBIENTE & VACINA PARA O ERRO DO CMAKE
-    - name: Setup Environment and Fix CMake
+    # 1. LIMPEZA E VACINA (Elimina a Steam e o Nanopb problemático)
+    - name: Setup Environment and Bypass Errors
       run: |
-        # Limpeza de pastas problemáticas
+        # Remove plataformas inúteis
         Remove-Item -Recurse -Force ./switch, ./android -ErrorAction Ignore
         if (Test-Path vcpkg.json) { Remove-Item -Force vcpkg.json }
         
-        # Baixa apenas os submódulos vitais para o controle
+        # Baixa apenas o necessário para o controle
         git submodule update --init --recursive third-party/nanopb
         git submodule update --init --recursive third-party/curl
         git submodule update --init --recursive third-party/jerasure
         git submodule update --init --recursive third-party/gf-complete
         
-        # A SOLUÇÃO PARA O ERRO "does not contain a CMakeLists.txt":
-        # Criamos a pasta e um arquivo vazio para enganar o CMake e ele não reclamar da falta da Steam
+        # A SOLUÇÃO DEFINITIVA PARA A IMAGEM: Criamos uma pasta Steam "falsa" e vazia
+        # Isso impede o CMake de tentar compilar a DLL que está falhando nas suas fotos
         New-Item -Path "third-party/cpp-steam-tools" -ItemType Directory -Force
         New-Item -Path "third-party/cpp-steam-tools/CMakeLists.txt" -ItemType File -Value "" -Force
 
@@ -39,7 +39,7 @@ jobs:
         choco install protoc --no-progress
         echo "C:\ProgramData\chocolatey\bin" >> $env:GITHUB_PATH
 
-    # 3. PYTHON
+    # 3. PYTHON BÁSICO
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
@@ -48,14 +48,14 @@ jobs:
     - name: Install Python Dependencies
       run: pip install protobuf==3.20.3 grpcio-tools nanopb
 
-    # 4. CACHE VCPKG (v16)
+    # 4. CACHE VCPKG (v17)
     - name: Restore vcpkg Cache
       uses: actions/cache@v4
       with:
         path: |
           C:/vcpkg/installed
           C:/vcpkg/packages
-        key: vcpkg-fast-control-v16
+        key: vcpkg-fast-control-v17
 
     # 5. DEPENDÊNCIAS C++
     - name: Install Dependencies
@@ -74,7 +74,7 @@ jobs:
       run: |
         (Get-Content lib/CMakeLists.txt) -replace 'Nanopb::nanopb', 'nanopb' | Set-Content lib/CMakeLists.txt
 
-    # 8. CONFIGURE CMAKE
+    # 8. CONFIGURE CMAKE (AQUI MATAMOS O SUPORTE À STEAM)
     - name: Configure CMake
       run: |
         $python_exe = (Get-Command python).Source
@@ -96,23 +96,13 @@ jobs:
           -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
           -DVCPKG_TARGET_TRIPLET=x64-windows
 
-    # 9. BUILD FINAL
+    # 9. BUILD
     - name: Build
       run: cmake --build build --config Release --parallel 4
 
-    # 10. UPLOAD ARTEFATO
+    # 10. ARTEFATO
     - name: Upload Executable
       uses: actions/upload-artifact@v4
       with:
         name: Chiaki-Control-Only
         path: build/gui/Release/chiaki.exe
-    - name: Build (Release)
-      run: |
-        cmake --build build --config Release
-
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: chiaki-control-only
-        path: build/Release/
-        
