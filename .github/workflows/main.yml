@@ -12,62 +12,72 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        submodules: false # Manual para garantir limpeza total
+        submodules: false
         fetch-depth: 0
 
-    # 1. REMOÇÃO FÍSICA RADICAL (O fim dos erros das fotos)
-    - name: Purge Problematic Modules
+    # 1. LIMPEZA E PREPARAÇÃO DO TERRENO
+    - name: Setup Environment
       run: |
-        # Deleta as pastas que falharam nas suas fotos e as que você não quer (Áudio/Vídeo)
         Remove-Item -Recurse -Force ./switch, ./android, ./third-party/cpp-steam-tools -ErrorAction Ignore
         if (Test-Path vcpkg.json) { Remove-Item -Force vcpkg.json }
         
-        # Baixa apenas o núcleo mínimo de rede
         git submodule update --init --recursive third-party/nanopb
         git submodule update --init --recursive third-party/curl
         git submodule update --init --recursive third-party/jerasure
         git submodule update --init --recursive third-party/gf-complete
         
-        # ENGANA O CMAKE: Cria um arquivo vazio para ele ignorar a Steam sem dar erro de pasta ausente
+        # VACINA STEAM (Pasta vazia para evitar erro de add_subdirectory)
         New-Item -Path "third-party/cpp-steam-tools" -ItemType Directory -Force
         New-Item -Path "third-party/cpp-steam-tools/CMakeLists.txt" -ItemType File -Value "" -Force
 
-    # 2. FERRAMENTAS NATIVAS
+    # 2. CORREÇÃO DE CODIFICAÇÃO (Sua solução de PowerShell)
+    # Isso garante que Takion.proto seja UTF-8 sem BOM, eliminando o byte 0xAA
+    - name: Force UTF-8 Encoding on Proto Files
+      run: |
+        $protoPath = "lib/protobuf/takion.proto"
+        if (Test-Path $protoPath) {
+            $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+            $content = Get-Content $protoPath -Raw
+            [System.IO.File]::WriteAllText($protoPath, $content, $utf8NoBom)
+            Write-Host "Sucesso: $protoPath convertido para UTF-8 puro (sem BOM)."
+        }
+
+    # 3. FORÇA UTF-8 NO PYTHON (Sua sugestão de ENV)
+    - name: Set Python Global UTF-8
+      run: |
+        echo "PYTHONUTF8=1" >> $env:GITHUB_ENV
+
+    # 4. FERRAMENTAS E DEPENDECIAS
     - name: Install Native Tools
       run: choco install protoc --no-progress
 
-    # 3. PYTHON BÁSICO
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
     - run: pip install protobuf==3.20.3 grpcio-tools nanopb
 
-    # 4. CACHE VCPKG (v24)
     - name: Restore vcpkg Cache
       uses: actions/cache@v4
       with:
         path: |
           C:/vcpkg/installed
           C:/vcpkg/packages
-        key: vcpkg-control-only-v24
+        key: vcpkg-control-only-v27
 
-    # 5. DEPENDÊNCIAS C++
     - name: Install Dependencies
       run: vcpkg install sdl2:x64-windows openssl:x64-windows pkgconf:x64-windows json-c:x64-windows miniupnpc:x64-windows nanopb:x64-windows --classic
 
-    # 6. QT BASE
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
         version: '6.6.0'
         arch: 'win64_msvc2019_64'
 
-    # 7. PATCH DE LINKAGEM
+    # 5. PATCH E CONFIGURAÇÃO CMAKE
     - name: Patch Nanopb Link
       run: (Get-Content lib/CMakeLists.txt) -replace 'Nanopb::nanopb', 'nanopb' | Set-Content lib/CMakeLists.txt
 
-    # 8. CONFIGURE CMAKE (EXTERMINANDO ÁUDIO, VÍDEO E STEAM)
     - name: Configure CMake
       run: |
         $python_exe = (Get-Command python).Source
@@ -89,13 +99,12 @@ jobs:
           -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
           -DVCPKG_TARGET_TRIPLET=x64-windows
 
-    # 9. BUILD FINAL
+    # 6. BUILD E ARTEFATO
     - name: Build
       run: cmake --build build --config Release --parallel 4
 
-    # 10. DOWNLOAD
     - name: Upload Executable
       uses: actions/upload-artifact@v4
       with:
-        name: Chiaki-Somente-Controle
+        name: Chiaki-Controle-Puro
         path: build/gui/Release/chiaki.exe
