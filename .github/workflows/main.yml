@@ -30,11 +30,11 @@ jobs:
         git submodule update --init --recursive third-party/gf-complete
         git submodule update --init --recursive third-party/cpp-steam-tools
 
-    # 2. INSTALA O COMPILADOR DE PROTOCOLO (Mantido)
+    # 2. INSTALA O COMPILADOR DE PROTOCOLO
     - name: Install Protoc
       run: choco install protoc --no-progress
 
-    # 3. PYTHON (Mantido)
+    # 3. PYTHON
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
@@ -44,20 +44,20 @@ jobs:
       run: |
         pip install protobuf==3.20.3 grpcio-tools nanopb
 
-    # 4. CACHE (Atualizado para v3 para garantir ambiente limpo)
+    # 4. CACHE (Atualizado para v4 para incluir as novas libs)
     - name: Restore vcpkg Cache
       uses: actions/cache@v4
       with:
         path: |
           C:/vcpkg/installed
           C:/vcpkg/packages
-        key: vcpkg-fast-control-v3
+        key: vcpkg-fast-control-v4
 
-    # 5. DEPENDÊNCIAS (A CORREÇÃO ESTÁ AQUI)
-    # Adicionamos 'pkgconf:x64-windows' para corrigir o erro "Could NOT find PkgConfig"
+    # 5. DEPENDÊNCIAS (A CORREÇÃO FINAL ESTÁ AQUI)
+    # Adicionamos 'json-c' e 'miniupnpc'. Elas são obrigatórias para o Chiaki rodar.
     - name: Install Dependencies
       run: |
-        vcpkg install sdl2:x64-windows openssl:x64-windows pkgconf:x64-windows --classic
+        vcpkg install sdl2:x64-windows openssl:x64-windows pkgconf:x64-windows json-c:x64-windows miniupnpc:x64-windows --classic
 
     # 6. QT BASE
     - name: Install Qt
